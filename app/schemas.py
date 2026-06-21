@@ -1,9 +1,3 @@
-# What are Schemas?
-# essentially a data bluepirnt for all data leaving and entering
-# the backend. define different schemas which can be used for different
-# operations such as get, post etc. cruically, define what data the client
-# recieves back
-
 # ------ IMPORTS ------
 from pydantic import (
     BaseModel,
@@ -11,9 +5,11 @@ from pydantic import (
     Field,
 )
 
+from datetime import datetime
+
 # ------ POSTS ------
 # // Base
-# this is the base model all posts will follow and inherit from
+# This is the base model all posts will follow and inherit from.
 class PostBase(BaseModel):
     title: str = Field(min_length = 1, max_length = 50)
     content: str = Field(min_length = 1)
@@ -25,12 +21,12 @@ class PostCreate(PostBase):
     pass
 
 # // Response
-# inherits from postbase meaning it has its own attributes on top of postbase
+# Inherits from PostBase meaning it has its own attributes on top of POstBase.
 class PostResponse(PostBase):
-    # essentially, allow it to be able to read the properties of the post
-    # passed through
+    # Essentially, allow it to be able to read the properties of the post
+    # passed through. By default, Pydantic expects normal Python dicts, but SQLAlchemy
+    # doesn't do that. So this is a switch to say yes it is fine to use dot notation.
     model_config = ConfigDict(from_attributes = True)
 
-    # add some extra properties
     id: int
-    date: str
+    date: datetime
