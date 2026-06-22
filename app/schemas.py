@@ -20,6 +20,13 @@ class PostBase(BaseModel):
 class PostCreate(PostBase):
     pass
 
+# // Update
+# This needs to inherit Pydantic's BaseModel so that the creator field isn't required
+class PostUpdate(BaseModel):
+    title: str | None = Field(default = None, min_length = 1, max_length = 50)
+    content: str | None = Field(default = None, min_length = 1)
+    rating: int | None = Field(default = None)
+
 # // Response
 # Inherits from PostBase meaning it has its own attributes on top of POstBase.
 class PostResponse(PostBase):
