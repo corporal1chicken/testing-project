@@ -5,7 +5,7 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 # ------ SETUP ------
 # This tells SQLAlchemy to use SQLite database driver and create a file
 # if it doesn't already exist.
-SQLALCHEMY_DATABASE_URL = "sqlite:///./posts.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./application.db"
 
 # This creates the actual engine to talk to the database
 engine = create_engine(

@@ -13,7 +13,7 @@ from typing import Annotated
 # ------ SETUP ------
 router = APIRouter()
 
-# ------ POSTS ------
+# ------ ENDPOINTS ------
 # // Get All
 # @app.get is the HTTP request we are making, in this case, a get
 # to retrieve data.
@@ -37,7 +37,8 @@ def get_all_posts(database: Annotated[Session, Depends(get_database)]):
 
 # // Get Specific 
 @router.get(
-    "/{post_id}"
+    "/{post_id}",
+    response_model = PostResponse
 )
 def get_specific_post(post_id: int, database: Annotated[Session, Depends(get_database)]):
     result = database.execute(

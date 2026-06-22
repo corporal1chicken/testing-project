@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi_swagger_ui_theme import setup_swagger_ui_theme
 
 from database import Base, engine
-from routes import posts
+from routes import posts, users
 
 # ------ SETUP ------
 app = FastAPI(docs_url = None)
@@ -22,6 +22,12 @@ app.include_router(
     prefix = "/api/posts",
     # Add a tags for a collapsable section on the docs.
     tags = ["posts"]
+)
+
+app.include_router(
+    users.router, 
+    prefix = "/api/users",
+    tags = ["users"]
 )
 
 # Dark Mode

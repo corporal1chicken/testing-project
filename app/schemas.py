@@ -3,9 +3,31 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    EmailStr
 )
 
 from datetime import datetime
+
+# ------ USERS ------
+# // Base
+class UserBase(BaseModel):
+    username: str = Field(min_length = 1, max_length = 50)
+    email: EmailStr = Field(max_length = 120)
+
+# // Create
+class UserCreate(UserBase):
+    pass
+
+# // Update
+class UserUpdate(UserBase):
+    username: str | None = Field(default = None, min_length = 1, max_length = 50)
+    email: EmailStr | None = Field(default = None, max_length = 120)
+
+# // Response
+class UserResponse(UserBase):
+    model_config = ConfigDict(from_attributes = True)
+
+    id: int
 
 # ------ POSTS ------
 # // Base
@@ -13,12 +35,11 @@ from datetime import datetime
 class PostBase(BaseModel):
     title: str = Field(min_length = 1, max_length = 50)
     content: str = Field(min_length = 1)
-    creator: str = Field(min_length = 1, max_length = 50)
     rating: int
 
 # // Create
 class PostCreate(PostBase):
-    pass
+    user_id: int
 
 # // Update
 # This needs to inherit Pydantic's BaseModel so that the creator field isn't required
@@ -37,3 +58,7 @@ class PostResponse(PostBase):
 
     id: int
     date: datetime
+    user_id: int
+    # The client will also recieve the actual creator's object to. They can do
+    # post.creator.username for example
+    creator: UserResponse

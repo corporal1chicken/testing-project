@@ -47,6 +47,10 @@ And here we find out if the chicken actually crosses the road!
 1. PATCH partial update
 This was giving a 422 unprocessable entity. THis was due to the PostUpdate schema inheriting from PostBase rather than Pydantic's BaseModel. PostBase required the creator field so PostUpdate required it too, and you almost never wanna update the creator of a post because that's silly. 
 
+2. get_specific_post missing creator object
+Forgot to set the response_model to be PostResponse which includes the user object
+
 ---
 ### NOTES
 - There cannot be any trailing commas when testing out in Swagger. Gives a 422 JSON Decode Erroe otherwise.
+- It is better to have get_specific_user and get_user_posts seperately rather than together like I was trying to do. Why? Because if a user has 300 posts, server will slow right down if I only need their email.
