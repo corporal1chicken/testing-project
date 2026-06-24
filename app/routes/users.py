@@ -1,6 +1,6 @@
 # ------- IMPORTS -------
 from typing import Annotated
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload, Session
 
 from fastapi import (
@@ -13,10 +13,25 @@ from fastapi import (
 import models
 from database import get_database
 
+from datetime import timedelta
+from fastapi.security import OAuth2PasswordRequestForm
+
+from auth import (
+    create_access_token, 
+    verify_access_token, 
+    hash_password, 
+    verify_password, 
+    oauth2_scheme
+)
+
+from config import settings
+
 from schemas import (
     UserCreate,
     UserUpdate,
-    UserResponse,
+    UserPublic,
+    UserPrivate, 
+    Token,
     PostResponse
 )
 
@@ -27,13 +42,13 @@ router = APIRouter()
 # // Create User
 @router.post(
     "",
-    response_model = UserResponse,
+    response_model = UserPrivate,
     status_code = status.HTTP_201_CREATED,
 )
 def create_user(user: UserCreate, database: Annotated[Session, Depends(get_database)]):
     result = database.execute(
         select(models.User)
-        .where(models.User.username == user.username)
+        .where(func.lower(models.User.username) == user.username.lower())
     )
 
     existing_user = result.scalars().first()
@@ -46,7 +61,7 @@ def create_user(user: UserCreate, database: Annotated[Session, Depends(get_datab
     
     result = database.execute(
         select(models.User)
-        .where(models.User.email == user.email)
+        .where(func.lower(models.User.email) == user.email.lower())
     )
 
     existing_email = result.scalars().first()
@@ -59,7 +74,8 @@ def create_user(user: UserCreate, database: Annotated[Session, Depends(get_datab
     
     new_user = models.User(
         username = user.username,
-        email = user.email
+        email = user.email.lower(),
+        password_hash = hash_password(user.password)
     )
 
     database.add(new_user)
@@ -68,10 +84,80 @@ def create_user(user: UserCreate, database: Annotated[Session, Depends(get_datab
 
     return new_user
 
+@router.post(
+    "/token", 
+    response_model = Token
+)
+def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], database: Annotated[Session, Depends(get_database)]):
+    result = database.execute(
+        select(models.User)
+        .where(func.lower(models.User.email) == form_data.username.lower(),)
+    )
+
+    user = result.scalars().first()
+
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail = "incorrect email or password",
+            headers = {"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token_expires = timedelta(minutes = settings.access_token_expire_minutes)
+
+    access_token = create_access_token(
+        data = {"sub": str(user.id)},
+        expires_delta = access_token_expires,
+    )
+
+    return Token(access_token = access_token, token_type = "bearer")
+
+# // Get Current User
+@router.get(
+    "/me", 
+    response_model = UserPrivate
+)
+# Protected route, forces the client to provide a valid token
+def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], database: Annotated[Session, Depends(get_database)]):
+    # Decode and verify the token
+    user_id = verify_access_token(token)
+
+    if user_id is None:
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail=  "invalid or expired token",
+            headers = {"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail = "Invalid or expired token",
+            headers = {"WWW-Authenticate": "Bearer"},
+        )
+
+    result = database.execute(
+        select(models.User)
+        .where(models.User.id == user_id_int),
+    )
+
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail = "user not found",
+            headers = {"WWW-Authenticate": "Bearer"},
+        )
+    
+    return user
+
 # // Get All Users
 @router.get(
     "",
-    response_model = list[UserResponse]
+    response_model = list[UserPublic]
 )
 def get_all_users(database: Annotated[Session, Depends(get_database)]):
     result = database.execute(select(models.User))
@@ -82,9 +168,9 @@ def get_all_users(database: Annotated[Session, Depends(get_database)]):
 # // Get Specific User
 @router.get(
     "/{user_id}", 
-    response_model = UserResponse
+    response_model = UserPublic
 )
-async def get_specific_user(user_id: int, database: Annotated[Session, Depends(get_database)]):
+def get_specific_user(user_id: int, database: Annotated[Session, Depends(get_database)]):
     result = database.execute(
         select(models.User)
         .where(models.User.id == user_id)
@@ -132,7 +218,7 @@ def get_user_posts(user_id: int, database: Annotated[Session, Depends(get_databa
 # // Update User
 @router.patch(
     "/{user_id}", 
-    response_model = UserResponse
+    response_model = UserPrivate
 )
 def update_user(user_id: int, user_update: UserUpdate, database: Annotated[Session, Depends(get_database)],):
     result = database.execute(
@@ -148,10 +234,10 @@ def update_user(user_id: int, user_update: UserUpdate, database: Annotated[Sessi
             detail = "user not found",
         )
 
-    if user_update.username is not None and user_update.username != user.username:
+    if user_update.username is not None and user_update.username.lower() != user.username.lower():
         result = database.execute(
             select(models.User)
-            .where(models.User.username == user_update.username),
+            .where(func.lower(models.User.username) == user_update.username.lower()),
         )
         existing_user = result.scalars().first()
 
@@ -161,10 +247,10 @@ def update_user(user_id: int, user_update: UserUpdate, database: Annotated[Sessi
                 detail = "username already exists",
             )
 
-    if user_update.email is not None and user_update.email != user.email:
+    if user_update.email is not None and user_update.email.lower() != user.email.lower():
         result = database.execute(
             select(models.User)
-            .where(models.User.email == user_update.email),
+            .where(func.lower(models.User.email) == user_update.email.lower()),
         )
         existing_email = result.scalars().first()
 
@@ -177,7 +263,7 @@ def update_user(user_id: int, user_update: UserUpdate, database: Annotated[Sessi
     if user_update.username is not None:
         user.username = user_update.username
     if user_update.email is not None:
-        user.email = user_update.email
+        user.email = user_update.email.lower()
 
     database.commit()
     database.refresh(user)

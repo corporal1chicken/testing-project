@@ -16,6 +16,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key = True, index = True)
     username: Mapped[str] = mapped_column(String(50), unique = True, nullable = False)
     email: Mapped[str] = mapped_column(String(120), unique = True, nullable = False)
+    password_hash: Mapped[str] = mapped_column(String(200), nullable = False)
 
     # NOT a database column. Tells SQLAlchemy to look at the posts table and
     # find any row where the user ID is equal to this user's ID and 

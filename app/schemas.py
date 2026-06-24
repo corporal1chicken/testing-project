@@ -16,18 +16,30 @@ class UserBase(BaseModel):
 
 # // Create
 class UserCreate(UserBase):
-    pass
+    # We recive the raw password from the client
+    password: str = Field(min_length = 8)
 
 # // Update
 class UserUpdate(UserBase):
     username: str | None = Field(default = None, min_length = 1, max_length = 50)
     email: EmailStr | None = Field(default = None, max_length = 120)
 
-# // Response
-class UserResponse(UserBase):
+# // Public Response
+# WHat the public sees about this users.
+class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes = True)
 
     id: int
+    username: str
+
+# // Private Response
+# WHat the user sees about themselves. Inherits from UserPublic.
+class UserPrivate(UserPublic):
+    email: EmailStr
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
 # ------ POSTS ------
 # // Base
@@ -61,4 +73,6 @@ class PostResponse(PostBase):
     user_id: int
     # The client will also recieve the actual creator's object to. They can do
     # post.creator.username for example
-    creator: UserResponse
+    # CHANGE: This will now only see the Public version of this user which doesn't include
+    # the email for privacy.
+    creator: UserPublic
