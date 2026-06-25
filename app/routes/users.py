@@ -18,10 +18,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from auth import (
     create_access_token, 
-    verify_access_token, 
     hash_password, 
     verify_password, 
-    oauth2_scheme
+    CurrentUser
 )
 
 from config import settings
@@ -118,41 +117,9 @@ def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depen
     response_model = UserPrivate
 )
 # Protected route, forces the client to provide a valid token
-def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], database: Annotated[Session, Depends(get_database)]):
-    # Decode and verify the token
-    user_id = verify_access_token(token)
-
-    if user_id is None:
-        raise HTTPException(
-            status_code = status.HTTP_401_UNAUTHORIZED,
-            detail=  "invalid or expired token",
-            headers = {"WWW-Authenticate": "Bearer"},
-        )
-
-    try:
-        user_id_int = int(user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail = "Invalid or expired token",
-            headers = {"WWW-Authenticate": "Bearer"},
-        )
-
-    result = database.execute(
-        select(models.User)
-        .where(models.User.id == user_id_int),
-    )
-
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(
-            status_code = status.HTTP_401_UNAUTHORIZED,
-            detail = "user not found",
-            headers = {"WWW-Authenticate": "Bearer"},
-        )
-    
-    return user
+def get_current_user(current_user: CurrentUser):
+    # The CurrentUser alias handles all of it now
+    return current_user
 
 # // Get All Users
 @router.get(
@@ -220,7 +187,18 @@ def get_user_posts(user_id: int, database: Annotated[Session, Depends(get_databa
     "/{user_id}", 
     response_model = UserPrivate
 )
-def update_user(user_id: int, user_update: UserUpdate, database: Annotated[Session, Depends(get_database)],):
+def update_user(
+    user_id: int, 
+    user_update: UserUpdate,
+    current_user: CurrentUser,
+    database: Annotated[Session, Depends(get_database)]
+):
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code = status.HTTP_403_FORBIDDEN,
+            detail = "not authorised to update this user"
+        )
+
     result = database.execute(
         select(models.User)
         .where(models.User.id == user_id)
@@ -275,7 +253,13 @@ def update_user(user_id: int, user_update: UserUpdate, database: Annotated[Sessi
     "/{user_id}",
     status_code = status.HTTP_204_NO_CONTENT
 )
-def delete_user(user_id: int, database: Annotated[Session, Depends(get_database)]):
+def delete_user(user_id: int, current_user: CurrentUser, database: Annotated[Session, Depends(get_database)]):
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code = status.HTTP_403_FORBIDDEN,
+            detail = "not authorised to delete this user"
+        )
+    
     result = database.execute(
         select(models.User)
         .where(models.User.id == user_id)

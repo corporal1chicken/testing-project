@@ -51,7 +51,7 @@ class PostBase(BaseModel):
 
 # // Create
 class PostCreate(PostBase):
-    user_id: int
+    pass
 
 # // Update
 # This needs to inherit Pydantic's BaseModel so that the creator field isn't required

@@ -7,6 +7,15 @@ from pwdlib import PasswordHash
 
 from config import settings
 
+from typing import Annotated
+from fastapi import Depends, HTTPException, status
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+import models
+from database import get_database
+
 # ------- SETUP -------
 # Creates a password hasher using Argon2 recommended defaults.
 password_hash = PasswordHash.recommended()
@@ -63,3 +72,49 @@ def verify_access_token(token: str) -> str | None:
     else:
         # Returns the user ID if valid
         return payload.get("sub")
+    
+def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    database: Annotated[Session, Depends(get_database)],
+) -> models.User:
+    # Verifies token
+    user_id = verify_access_token(token)
+
+    # Token is invalid/expired
+    if user_id is None:
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail = "invalid or expired token",
+            headers = {"WWW-Authenticate": "Bearer"}
+        )
+
+    # Convert user ID to an int as a string
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail = "Invalid or expired token",
+            headers = {"WWW-Authenticate": "Bearer"}
+        )
+
+    # Get actual user object
+    result = database.execute(
+        select(models.User)
+        .where(models.User.id == user_id_int),
+    )
+
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail = "user not found",
+            headers = {"WWW-Authenticate": "Bearer"},
+        )
+    
+    return user
+
+# Annotated: "Here's a user with some metadata and they depend on get_current_user"
+# Instead of wrtting out Annotated[] constantly, we use this alias.
+CurrentUser = Annotated[models.User, Depends(get_current_user)]

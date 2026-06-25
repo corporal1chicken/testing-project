@@ -56,6 +56,8 @@ And here we find out if the chicken actually crosses the road!
 
 **401**: (Error) "I don't know who you are"
 
+**403**: (Error): You don't have permission to do this
+
 **404**: (Error) Content was not found
 
 **422**: (Error) Request could not be processed due to missing or invalid fields

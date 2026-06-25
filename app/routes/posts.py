@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 import models
 from database import get_database, engine
+from auth import CurrentUser
 
 from typing import Annotated
 
@@ -61,8 +62,14 @@ def get_specific_post(post_id: int, database: Annotated[Session, Depends(get_dat
     response_model = PostResponse,
     status_code = status.HTTP_201_CREATED
 )
-def create_post(post: PostCreate, database: Annotated[Session, Depends(get_database)]):
-    new_post = models.Post(**post.model_dump())
+# current_user: Runs the alias we created in auth which checks for a valid token
+def create_post(post: PostCreate, current_user: CurrentUser, database: Annotated[Session, Depends(get_database)]):
+    new_post = models.Post(
+        title = post.title,
+        content = post.content,
+        rating = post.rating,
+        user_id = current_user.id
+    )
 
     database.add(new_post)
     database.commit()
@@ -75,7 +82,7 @@ def create_post(post: PostCreate, database: Annotated[Session, Depends(get_datab
     "/{post_id}",
     status_code = status.HTTP_204_NO_CONTENT
 )
-def delete_post(post_id: int, database: Annotated[Session, Depends(get_database)]):
+def delete_post(post_id: int, current_user: CurrentUser, database: Annotated[Session, Depends(get_database)]):
     result = database.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
@@ -87,6 +94,12 @@ def delete_post(post_id: int, database: Annotated[Session, Depends(get_database)
             status_code = status.HTTP_404_NOT_FOUND,
             detail = "post not found"
         )
+
+    if post.user_id != current_user.id:
+        raise HTTPException(
+            status_code = status.HTTP_403_FORBIDDEN,
+            detail = "not authorised to delete this post"
+        )
     
     database.delete(post)
     database.commit()
@@ -96,7 +109,12 @@ def delete_post(post_id: int, database: Annotated[Session, Depends(get_database)
     "/{post_id}",
     response_model = PostResponse
 )
-def update_post_partial(post_id: int, post_data: PostUpdate, database: Annotated[Session, Depends(get_database)]):
+def update_post_partial(
+    post_id: int, 
+    post_data: PostUpdate, 
+    current_user: CurrentUser,
+    database: Annotated[Session, Depends(get_database)]
+):
     result = database.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
@@ -108,6 +126,12 @@ def update_post_partial(post_id: int, post_data: PostUpdate, database: Annotated
             status_code = status.HTTP_404_NOT_FOUND, 
             detail = "post not found"
         )
+    
+    if post.user_id != current_user.id:
+        raise HTTPException(
+            status_code = status.HTTP_403_FORBIDDEN,
+            detail = "not authorised to update this post"
+        )
 
     update_data = post_data.model_dump(exclude_unset = True)
 
@@ -115,8 +139,7 @@ def update_post_partial(post_id: int, post_data: PostUpdate, database: Annotated
         setattr(post, field, value)
 
     database.commit()
-    database.refresh(post)
-    # database.refresh(post, attribute_names = ["creator"])
+    database.refresh(post, attribute_names = ["creator"])
     
     return post
 
@@ -125,7 +148,12 @@ def update_post_partial(post_id: int, post_data: PostUpdate, database: Annotated
     "/{post_id}",
     response_model = PostResponse
 )
-def update_post_full(post_id: int, post_data: PostUpdate, database: Annotated[Session, Depends(get_database)]):
+def update_post_full(
+    post_id: int, 
+    post_data: PostCreate,
+    current_user: CurrentUser,
+    database: Annotated[Session, Depends(get_database)]
+):
     result = database.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
@@ -138,27 +166,17 @@ def update_post_full(post_id: int, post_data: PostUpdate, database: Annotated[Se
             detail = "Post not found"
         )
     
-    """if post_data.user_id != post.user_id:
-        result = database.execute(
-            select(models.User)
-            .where(models.User.id == post_data.user_id)
+    if post.user_id != current_user.id:
+        raise HTTPException(
+            status_code = status.HTTP_403_FORBIDDEN,
+            detail = "not authorised to update this post"
         )
-
-        user = result.scalars().first()
-        
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail = "User not found",
-            )"""
 
     post.title = post_data.title
     post.content = post_data.content
     post.rating = post_data.rating
-    # post.user_id = post_data.user_id
 
     database.commit()
-    database.refresh(post)
-    # database.refresh(post, attribute_names = ["author"])
+    database.refresh(post, attribute_names = ["creator"])
     
     return post
