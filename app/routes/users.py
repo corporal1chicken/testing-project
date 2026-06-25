@@ -1,7 +1,8 @@
 # ------- IMPORTS -------
 from typing import Annotated
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import (
     APIRouter, 
@@ -44,8 +45,11 @@ router = APIRouter()
     response_model = UserPrivate,
     status_code = status.HTTP_201_CREATED,
 )
-def create_user(user: UserCreate, database: Annotated[Session, Depends(get_database)]):
-    result = database.execute(
+async def create_user(
+    user: UserCreate, 
+    database: Annotated[AsyncSession, Depends(get_database)]
+):
+    result = await database.execute(
         select(models.User)
         .where(func.lower(models.User.username) == user.username.lower())
     )
@@ -58,7 +62,7 @@ def create_user(user: UserCreate, database: Annotated[Session, Depends(get_datab
             detail = "username already exists"
         )
     
-    result = database.execute(
+    result = await database.execute(
         select(models.User)
         .where(func.lower(models.User.email) == user.email.lower())
     )
@@ -78,8 +82,8 @@ def create_user(user: UserCreate, database: Annotated[Session, Depends(get_datab
     )
 
     database.add(new_user)
-    database.commit()
-    database.refresh(new_user)
+    await database.commit()
+    await database.refresh(new_user)
 
     return new_user
 
@@ -87,8 +91,11 @@ def create_user(user: UserCreate, database: Annotated[Session, Depends(get_datab
     "/token", 
     response_model = Token
 )
-def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], database: Annotated[Session, Depends(get_database)]):
-    result = database.execute(
+async def login_for_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    database: Annotated[AsyncSession, Depends(get_database)]
+):
+    result = await database.execute(
         select(models.User)
         .where(func.lower(models.User.email) == form_data.username.lower(),)
     )
@@ -117,7 +124,9 @@ def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depen
     response_model = UserPrivate
 )
 # Protected route, forces the client to provide a valid token
-def get_current_user(current_user: CurrentUser):
+def get_current_user(
+    current_user: CurrentUser
+):
     # The CurrentUser alias handles all of it now
     return current_user
 
@@ -126,8 +135,10 @@ def get_current_user(current_user: CurrentUser):
     "",
     response_model = list[UserPublic]
 )
-def get_all_users(database: Annotated[Session, Depends(get_database)]):
-    result = database.execute(select(models.User))
+async def get_all_users(
+    database: Annotated[AsyncSession, Depends(get_database)]
+):
+    result = await database.execute(select(models.User))
     users = result.scalars().all()
 
     return users
@@ -137,8 +148,11 @@ def get_all_users(database: Annotated[Session, Depends(get_database)]):
     "/{user_id}", 
     response_model = UserPublic
 )
-def get_specific_user(user_id: int, database: Annotated[Session, Depends(get_database)]):
-    result = database.execute(
+async def get_specific_user(
+    user_id: int, 
+    database: Annotated[AsyncSession, Depends(get_database)]
+):
+    result = await database.execute(
         select(models.User)
         .where(models.User.id == user_id)
     )
@@ -158,8 +172,11 @@ def get_specific_user(user_id: int, database: Annotated[Session, Depends(get_dat
     "/{user_id}/posts", 
     response_model = list[PostResponse]
 )
-def get_user_posts(user_id: int, database: Annotated[Session, Depends(get_database)]):
-    result = database.execute(
+async def get_user_posts(
+    user_id: int, 
+    database: Annotated[AsyncSession, Depends(get_database)]
+):
+    result = await database.execute(
         select(models.User)
         .where(models.User.id == user_id)
     )
@@ -172,7 +189,7 @@ def get_user_posts(user_id: int, database: Annotated[Session, Depends(get_databa
             detail = "User not found",
         )
 
-    result = database.execute(
+    result = await database.execute(
         select(models.Post)
         .options(selectinload(models.Post.creator))
         .where(models.Post.user_id == user_id)
@@ -187,11 +204,11 @@ def get_user_posts(user_id: int, database: Annotated[Session, Depends(get_databa
     "/{user_id}", 
     response_model = UserPrivate
 )
-def update_user(
+async def update_user(
     user_id: int, 
     user_update: UserUpdate,
     current_user: CurrentUser,
-    database: Annotated[Session, Depends(get_database)]
+    database: Annotated[AsyncSession, Depends(get_database)]
 ):
     if user_id != current_user.id:
         raise HTTPException(
@@ -199,7 +216,7 @@ def update_user(
             detail = "not authorised to update this user"
         )
 
-    result = database.execute(
+    result = await database.execute(
         select(models.User)
         .where(models.User.id == user_id)
     )
@@ -213,10 +230,11 @@ def update_user(
         )
 
     if user_update.username is not None and user_update.username.lower() != user.username.lower():
-        result = database.execute(
+        result = await database.execute(
             select(models.User)
             .where(func.lower(models.User.username) == user_update.username.lower()),
         )
+
         existing_user = result.scalars().first()
 
         if existing_user:
@@ -226,10 +244,11 @@ def update_user(
             )
 
     if user_update.email is not None and user_update.email.lower() != user.email.lower():
-        result = database.execute(
+        result = await database.execute(
             select(models.User)
             .where(func.lower(models.User.email) == user_update.email.lower()),
         )
+
         existing_email = result.scalars().first()
 
         if existing_email:
@@ -243,8 +262,8 @@ def update_user(
     if user_update.email is not None:
         user.email = user_update.email.lower()
 
-    database.commit()
-    database.refresh(user)
+    await database.commit()
+    await database.refresh(user)
 
     return user
 
@@ -253,14 +272,18 @@ def update_user(
     "/{user_id}",
     status_code = status.HTTP_204_NO_CONTENT
 )
-def delete_user(user_id: int, current_user: CurrentUser, database: Annotated[Session, Depends(get_database)]):
+async def delete_user(
+    user_id: int, 
+    current_user: CurrentUser, 
+    database: Annotated[AsyncSession, Depends(get_database)]
+):
     if user_id != current_user.id:
         raise HTTPException(
             status_code = status.HTTP_403_FORBIDDEN,
             detail = "not authorised to delete this user"
         )
     
-    result = database.execute(
+    result = await database.execute(
         select(models.User)
         .where(models.User.id == user_id)
     )
@@ -272,5 +295,5 @@ def delete_user(user_id: int, current_user: CurrentUser, database: Annotated[Ses
             detail = "user not found",
         )
 
-    database.delete(user)
-    database.commit()
+    await database.delete(user)
+    await database.commit()

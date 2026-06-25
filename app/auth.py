@@ -73,7 +73,7 @@ def verify_access_token(token: str) -> str | None:
         # Returns the user ID if valid
         return payload.get("sub")
     
-def get_current_user(
+async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     database: Annotated[Session, Depends(get_database)],
 ) -> models.User:
@@ -99,7 +99,7 @@ def get_current_user(
         )
 
     # Get actual user object
-    result = database.execute(
+    result = await database.execute(
         select(models.User)
         .where(models.User.id == user_id_int),
     )

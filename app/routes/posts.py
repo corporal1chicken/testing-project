@@ -3,7 +3,7 @@ from fastapi import HTTPException, status, Depends, APIRouter
 from schemas import PostResponse, PostCreate, PostUpdate
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
 from database import get_database, engine
@@ -27,10 +27,10 @@ router = APIRouter()
 # Dependency Injection: We are telling FastAPI that this function depends on this tool
 # which is get_database. Run that first before running this function.
 # Annotated[Session] is the python typehint.
-def get_all_posts(database: Annotated[Session, Depends(get_database)]):
+async def get_all_posts(database: Annotated[AsyncSession, Depends(get_database)]):
     # This is SQLAlchemy in play, execute an operation on the active database as
     # Python objects, not raw SQL.
-    result = database.execute(select(models.Post))
+    result = await database.execute(select(models.Post))
     # .scalars() tells SQLAlchemy to return the data as instances of the Post class.
     posts = result.scalars().all()
 
@@ -41,8 +41,11 @@ def get_all_posts(database: Annotated[Session, Depends(get_database)]):
     "/{post_id}",
     response_model = PostResponse
 )
-def get_specific_post(post_id: int, database: Annotated[Session, Depends(get_database)]):
-    result = database.execute(
+async def get_specific_post(
+    post_id: int, 
+    database: Annotated[AsyncSession, Depends(get_database)]
+):
+    result = await database.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
     )
@@ -63,7 +66,11 @@ def get_specific_post(post_id: int, database: Annotated[Session, Depends(get_dat
     status_code = status.HTTP_201_CREATED
 )
 # current_user: Runs the alias we created in auth which checks for a valid token
-def create_post(post: PostCreate, current_user: CurrentUser, database: Annotated[Session, Depends(get_database)]):
+async def create_post(
+    post: PostCreate, 
+    current_user: CurrentUser, 
+    database: Annotated[AsyncSession, Depends(get_database)]
+):
     new_post = models.Post(
         title = post.title,
         content = post.content,
@@ -72,8 +79,8 @@ def create_post(post: PostCreate, current_user: CurrentUser, database: Annotated
     )
 
     database.add(new_post)
-    database.commit()
-    database.refresh(new_post)
+    await database.commit()
+    await database.refresh(new_post, attribute_names = ["author"])
 
     return new_post
 
@@ -82,8 +89,12 @@ def create_post(post: PostCreate, current_user: CurrentUser, database: Annotated
     "/{post_id}",
     status_code = status.HTTP_204_NO_CONTENT
 )
-def delete_post(post_id: int, current_user: CurrentUser, database: Annotated[Session, Depends(get_database)]):
-    result = database.execute(
+async def delete_post(
+    post_id: int, 
+    current_user: CurrentUser, 
+    database: Annotated[AsyncSession, Depends(get_database)]
+):
+    result = await database.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
     )
@@ -101,21 +112,21 @@ def delete_post(post_id: int, current_user: CurrentUser, database: Annotated[Ses
             detail = "not authorised to delete this post"
         )
     
-    database.delete(post)
-    database.commit()
+    await database.delete(post)
+    await database.commit()
 
 # // Partially Update Post
 @router.patch(
     "/{post_id}",
     response_model = PostResponse
 )
-def update_post_partial(
+async def update_post_partial(
     post_id: int, 
     post_data: PostUpdate, 
     current_user: CurrentUser,
-    database: Annotated[Session, Depends(get_database)]
+    database: Annotated[AsyncSession, Depends(get_database)]
 ):
-    result = database.execute(
+    result = await database.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
     )
@@ -138,8 +149,8 @@ def update_post_partial(
     for field, value in update_data.items():
         setattr(post, field, value)
 
-    database.commit()
-    database.refresh(post, attribute_names = ["creator"])
+    await database.commit()
+    await database.refresh(post, attribute_names = ["creator"])
     
     return post
 
@@ -148,13 +159,13 @@ def update_post_partial(
     "/{post_id}",
     response_model = PostResponse
 )
-def update_post_full(
+async def update_post_full(
     post_id: int, 
     post_data: PostCreate,
     current_user: CurrentUser,
-    database: Annotated[Session, Depends(get_database)]
+    database: Annotated[AsyncSession, Depends(get_database)]
 ):
-    result = database.execute(
+    result = await database.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
     )
@@ -176,7 +187,7 @@ def update_post_full(
     post.content = post_data.content
     post.rating = post_data.rating
 
-    database.commit()
-    database.refresh(post, attribute_names = ["creator"])
+    await database.commit()
+    await database.refresh(post, attribute_names = ["creator"])
     
     return post

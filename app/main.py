@@ -6,12 +6,24 @@ from fastapi_swagger_ui_theme import setup_swagger_ui_theme
 from database import Base, engine
 from routes import posts, users
 
-# ------ SETUP ------
-app = FastAPI(docs_url = None)
+from contextlib import asynccontextmanager
 
-# This looks at all the models that inherit from base and 
-# creates the tables if they don't exist.
-Base.metadata.create_all(bind = engine)
+# ------ SETUP ------
+# Async Manager.
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # On Startup.
+    async with engine.begin() as connection:
+        # Create database tables if they don't exist yet.
+        await connection.run_sync(Base.metadata.create_all)
+
+    # Hold.                       
+    yield
+
+    # On Shutdown.
+    await engine.dispose()
+
+app = FastAPI(lifespan = lifespan, docs_url = None)
 
 # Routers
 # Connects each router to the main app.
@@ -39,5 +51,5 @@ setup_swagger_ui_theme(
 
 # // Home Route
 @app.get("/")
-def home():
+async def home():
     return {"status": "working"}
